@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Statistiques de l'avocat</title>
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <style>
+/* 
+// Récupérer l'id_specialite de la requête GET
+$id_specialite = isset($_GET['id_specialite']) ? intval($_GET['id_specialite']) : 0;
+
+// Préparer et exécuter la requête SQL
+$sql = "SELECT pourcentage_sans_acute, pourcentage_capacite_jugement, pourcentage_connaissance_approfondie 
+        FROM info_avocat 
+        WHERE id_specialite = ?";
+
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("i", $id_specialite);
+$stmt->execute();
+$result = $stmt->get_result();
+
+if ($result->num_rows > 0) {
+    // Récupérer les données
+    $row = $result->fetch_assoc();
+    
+    // Préparer la réponse JSON
+    $response = [
+        'pourcentage_sans_acute' => floatval($row['pourcentage_sans_acute']),
+        'pourcentage_capacite_jugement' => floatval($row['pourcentage_capacite_jugement']),
+        'pourcentage_connaissance_approfondie' => floatval($row['pourcentage_connaissance_approfondie'])
+    ];
+} else {
+    // Aucune donnée trouvée
+    $response = [
+        'pourcentage_sans_acute' => 0,
+        'pourcentage_capacite_jugement' => 0,
+        'pourcentage_connaissance_approfondie' => 0
+    ];
+}
+
+// Fermer la connexion
+$stmt->close();
+$conn->close();
+
+// Envoyer la réponse JSON
+header('Content-Type: application/json');
+echo json_encode($response); */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        #chart_div {
+            width: 100%;
+            height: 400px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Statistiques de l'avocat</h1>
+        <div id="chart_div"></div>
+    </div>
+
+    <script>
+        // Charger la bibliothèque Google Charts
+        google.charts.load('current', {'packages':['corechart']});
+        google.charts.setOnLoadCallback(drawChart);
+
+        function drawChart() {
+            // Simuler une requête à une API pour obtenir les données
+            // Dans un cas réel, vous feriez un appel AJAX à votre backend ici
+            const urlParams = new URLSearchParams(window.location.search);
+            const id_specialite = urlParams.get('id_specialite');
+
+            // Simulons une base de données
+            const infosAvocats = {
+                '1': {
+                    pourcentage_sans_acute: 20,
+                    pourcentage_capacite_jugement: 40,
+                    pourcentage_connaissance_approfondie: 40,
+                },
+                '2': {
+                    pourcentage_sans_acute: 30,
+                    pourcentage_capacite_jugement: 30,
+                    pourcentage_connaissance_approfondie: 40,
+                },
+                // Ajoutez d'autres spécialités si nécessaire
+            };
+
+            const avocatInfo = infosAvocats[id_specialite] || {
+                pourcentage_sans_acute: 0,
+                pourcentage_capacite_jugement: 0,
+                pourcentage_connaissance_approfondie: 0,
+            };
+
+            var data = google.visualization.arrayToDataTable([
+                ['Compétence', 'Pourcentage'],
+                ['Sans acuité', avocatInfo.pourcentage_sans_acute],
+                ['Capacité de jugement', avocatInfo.pourcentage_capacite_jugement],
+                ['Connaissance approfondie', avocatInfo.pourcentage_connaissance_approfondie],
+            ]);
+
+            var options = {
+                title: 'Statistiques de l\'avocat - Spécialité ID: ' + id_specialite,
+                is3D: true,
+            };
+
+            var chart = new google.visualization.PieChart(document.getElementById('chart_div'));
+            chart.draw(data, options);
+        }
+    </script>
+</body>
+</html>
