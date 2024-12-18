@@ -1,89 +1,116 @@
 <?php
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\SMTP;
-use PHPMailer\PHPMailer\Exception;
-
+require 'assets/email/email.php';
 require 'vendor/autoload.php';
+require_once 'assets/connexion/connexion.php';
 
 function generateMatricule() {
-    return 'YC' . str_pad(mt_rand(0, 9999), 4, '0', STR_PAD_LEFT);
+    return 'AV' . str_pad(mt_rand(0, 9999), 4, '0', STR_PAD_LEFT);
 }
 
-function sendEmail($to, $subject, $body) {
-    $mail = new PHPMailer(true);
-    try {
-        // Enable verbose debug output
-        $mail->SMTPDebug = SMTP::DEBUG_SERVER;
-        $mail->Debugoutput = function($str, $level) {
-            error_log("PHPMailer debug: $str");
-        };
-
-        // Server settings
-        $mail->isSMTP();
-        $mail->Host       = 'smtp.gmail.com';
-        $mail->SMTPAuth   = true;
-        $mail->Username   = 'oumaymabramid@gmail.com';
-        $mail->Password   = 'jvqz dkzq jkap aeea'; 
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port       = 587;
-
-        $mail->Timeout = 30; 
-
-        $mail->SMTPOptions = array(
-            'ssl' => array(
-                'verify_peer' => false,
-                'verify_peer_name' => false,
-                'allow_self_signed' => true
-            )
-        );
-
-        // Reception
-        $mail->setFrom('noreply@cabinetadvocate.com', 'Cabinet ADVOCATE');
-        $mail->addReplyTo('contact@cabinetadvocate.com', 'Service Client Cabinet ADVOCATE');
-        $mail->addAddress($to);
-
-        $mail->addCustomHeader('Sender', 'noreply@cabinetadvocate.com');
-
-        // Content
-        $mail->isHTML(true);
-        $mail->Subject = $subject;
-        $mail->Body    = $body;
-        $mail->AltBody = strip_tags($body);
-
-        $mail->send();
-        return true;
-    } catch (Exception $e) {
-        error_log("PHPMailer Error: " . $e->getMessage());
-        return false;
+function sanitizeInput($input) {
+    if(is_array($input)) {
+        foreach($input as $key => $value) {
+            $input[$key] = sanitizeInput($value);
+        }
+    } else {
+        $input = trim($input);
+        $input = stripslashes($input);
+        $input = htmlspecialchars($input, ENT_QUOTES, 'UTF-8');
     }
+    return $input;
 }
 
 $message = '';
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $nom = htmlspecialchars($_POST['nom'], ENT_QUOTES, 'UTF-8');
-    $prenom = htmlspecialchars($_POST['prenom'], ENT_QUOTES, 'UTF-8');
+    // Sanitize and validate input
+    $nom = sanitizeInput($_POST['nom']);
+    $prenom = sanitizeInput($_POST['prenom']);
     $email = filter_var($_POST['email'], FILTER_SANITIZE_EMAIL);
-    $tel = htmlspecialchars($_POST['tel'], ENT_QUOTES, 'UTF-8');
+    $tel = sanitizeInput($_POST['tel']);
     $password = $_POST['password'];
-    $matricule = generateMatricule();
-    $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+    $post = sanitizeInput($_POST['post']);
+    $biographie = isset($_POST['biographie']) ? sanitizeInput($_POST['biographie']) : '';
+    $derniere_diplome = isset($_POST['derniere_diplome']) ? sanitizeInput($_POST['derniere_diplome']) : '';
+    $adresse = isset($_POST['adresse']) ? sanitizeInput($_POST['adresse']) : '';
 
-    $subject = 'Inscription au Cabinet Advocate';
-    $body = "
-    <h1>Bonjour $prenom $nom,</h1>
-    <p>Merci de vous être inscrit au Cabinet Advocate. Voici vos informations d'inscription :</p>
-    <p><strong>Matricule :</strong> $matricule</p>
-    <p><strong>Email :</strong> $email</p>
-    <p><strong>Téléphone :</strong> $tel</p>
-    <p>Nous vous recommandons de changer votre mot de passe lors de votre première connexion.</p>
-    <p>Cordialement,<br>L'équipe du Cabinet Advocate</p>
-    ";
-    
-    if (sendEmail($email, $subject, $body)) {
-        $message = "Inscription réussie ! Un email a été envoyé à $email avec vos informations.";
+    // Validate email
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $message = "Adresse email invalide.";
     } else {
-        $message = "Échec de l'envoi de l'email d'inscription. Veuillez contacter l'administrateur.";
+        $matricule = generateMatricule();
+        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+
+        try {
+            // Check if email already exists
+            $checkEmailSql = "SELECT email FROM user_ WHERE email = :email";
+            $checkEmailStmt = $conn->prepare($checkEmailSql);
+            $checkEmailStmt->bindParam(':email', $email, PDO::PARAM_STR);
+            $checkEmailStmt->execute();
+
+            if ($checkEmailStmt->rowCount() > 0) {
+                $message = "Cet email est déjà utilisé. Veuillez en choisir un autre.";
+            } else {
+                // Begin transaction
+                $conn->beginTransaction();
+
+                // Insert into user_ table
+                $insertSql = "INSERT INTO user_ (nom, prenom, email, tel, password, matricule, Post) 
+                              VALUES (:nom, :prenom, :email, :tel, :hashedPassword, :matricule, :post)";
+                $insertStmt = $conn->prepare($insertSql);
+                $insertStmt->bindParam(':nom', $nom, PDO::PARAM_STR);
+                $insertStmt->bindParam(':prenom', $prenom, PDO::PARAM_STR);
+                $insertStmt->bindParam(':email', $email, PDO::PARAM_STR);
+                $insertStmt->bindParam(':tel', $tel, PDO::PARAM_STR);
+                $insertStmt->bindParam(':hashedPassword', $hashedPassword, PDO::PARAM_STR);
+                $insertStmt->bindParam(':matricule', $matricule, PDO::PARAM_STR);
+                $insertStmt->bindParam(':post', $post, PDO::PARAM_STR);
+
+                $insertStmt->execute();
+
+                $userId = $conn->lastInsertId();
+
+                // If the user is an Avocat, insert additional information
+                if ($post === 'Avocat') {
+                    $avocatSql = "INSERT INTO info_avocat (id_avocat, biographie, derniere_diplome, adresse) 
+                                  VALUES (:id_avocat, :biographie, :derniere_diplome, :adresse)";
+                    $avocatStmt = $conn->prepare($avocatSql);
+                    $avocatStmt->bindParam(':id_avocat', $userId, PDO::PARAM_INT);
+                    $avocatStmt->bindParam(':biographie', $biographie, PDO::PARAM_STR);
+                    $avocatStmt->bindParam(':derniere_diplome', $derniere_diplome, PDO::PARAM_STR);
+                    $avocatStmt->bindParam(':adresse', $adresse, PDO::PARAM_STR);
+                    
+                    if (!$avocatStmt->execute()) {
+                        throw new PDOException("Erreur lors de l'insertion des informations de l'avocat");
+                    }
+                }
+
+                // Commit transaction
+                $conn->commit();
+
+                $subject = 'Inscription au Cabinet Advocate';
+                $body = "
+                <h1>Bonjour $prenom $nom,</h1>
+                <p>Merci de vous être inscrit au Cabinet Advocate. Voici vos informations d'inscription :</p>
+                <p><strong>Matricule :</strong> $matricule</p>
+                <p><strong>Email :</strong> $email</p>
+                <p><strong>Téléphone :</strong> $tel</p>
+                <p>Nous vous recommandons de changer votre mot de passe lors de votre première connexion.</p>
+                <p>Cordialement,<br>L'équipe du Cabinet Advocate</p>
+                ";
+                
+                if (sendEmail($email, $subject, $body)) {
+                    $message = "Inscription réussie ! Un email a été envoyé à $email avec vos informations.";
+                } else {
+                    $message = "Inscription réussie, mais l'envoi de l'email a échoué. Veuillez contacter l'administrateur.";
+                }
+            }
+        } catch (PDOException $e) {
+            // Rollback transaction on error
+            $conn->rollBack();
+            $message = "Une erreur est survenue lors de l'inscription. Veuillez réessayer. Erreur : " . $e->getMessage();
+            error_log("Error: " . $e->getMessage());
+        }
     }
 }
 ?>
@@ -94,59 +121,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inscription - Cabinet Advocate</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            margin: 0;
-            padding: 20px;
-            background-color: #f4f4f4;
+    <link rel="stylesheet" href="assets/css/style_index.css">
+    <script>
+        function toggleAvocatFields() {
+            var post = document.getElementById('post').value;
+            var avocatFields = document.getElementById('avocat_fields');
+            avocatFields.style.display = (post === 'Avocat') ? 'block' : 'none';
         }
-        .container {
-            max-width: 500px;
-            margin: auto;
-            background: #fff;
-            padding: 20px;
-            border-radius: 5px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-        }
-        h2 {
-            text-align: center;
-            color: #333;
-        }
-        form {
-            display: flex;
-            flex-direction: column;
-        }
-        label {
-            margin-bottom: 5px;
-        }
-        input {
-            padding: 8px;
-            margin-bottom: 20px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-        input[type="submit"] {
-            background-color: #5cb85c;
-            color: white;
-            border: none;
-            padding: 10px;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        input[type="submit"]:hover {
-            background-color: #4cae4c;
-        }
-        .message {
-            margin-top: 20px;
-            padding: 10px;
-            background-color: #dff0d8;
-            border: 1px solid #d6e9c6;
-            color: #3c763d;
-            border-radius: 4px;
-        }
-    </style>
+    </script>
 </head>
 <body>
     <div class="container">
@@ -170,9 +152,26 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             <label for="password">Mot de passe :</label>
             <input type="password" id="password" name="password" required>
 
+            <label for="post">Votre Poste :</label>
+            <select name="post" id="post" required onchange="toggleAvocatFields()">
+                <option value="">Sélectionnez votre poste</option>
+                <option value="Client">Client</option>
+                <option value="Avocat">Avocat</option>
+            </select>
+
+            <div id="avocat_fields" style="display: none;">
+                <label for="biographie">Biographie :</label>
+                <textarea id="biographie" name="biographie"></textarea>
+
+                <label for="derniere_diplome">Dernier Diplôme :</label>
+                <input type="text" id="derniere_diplome" name="derniere_diplome">
+
+                <label for="adresse">Adresse :</label>
+                <input type="text" id="adresse" name="adresse">
+            </div>
+
             <input type="submit" value="S'inscrire">
         </form>
     </div>
 </body>
 </html>
-
