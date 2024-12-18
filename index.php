@@ -28,7 +28,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $prenom = sanitizeInput($_POST['prenom']);
     $email = filter_var($_POST['email'], FILTER_SANITIZE_EMAIL);
     $tel = sanitizeInput($_POST['tel']);
-    $password = $_POST['password'];
+    $password = $_POST['password']; // We'll hash this later
     $post = sanitizeInput($_POST['post']);
     $biographie = isset($_POST['biographie']) ? sanitizeInput($_POST['biographie']) : '';
     $derniere_diplome = isset($_POST['derniere_diplome']) ? sanitizeInput($_POST['derniere_diplome']) : '';
@@ -68,21 +68,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
                 $insertStmt->execute();
 
-                $userId = $conn->lastInsertId();
-
                 // If the user is an Avocat, insert additional information
                 if ($post === 'Avocat') {
-                    $avocatSql = "INSERT INTO info_avocat (id_avocat, biographie, derniere_diplome, adresse) 
-                                  VALUES (:id_avocat, :biographie, :derniere_diplome, :adresse)";
+                    $avocatSql = "INSERT INTO avocat_info (id_avocat , biographie, derniere_diplome, adresse) 
+                                  VALUES (LAST_INSERT_ID(), :biographie, :derniere_diplome, :adresse)";
                     $avocatStmt = $conn->prepare($avocatSql);
-                    $avocatStmt->bindParam(':id_avocat', $userId, PDO::PARAM_INT);
                     $avocatStmt->bindParam(':biographie', $biographie, PDO::PARAM_STR);
                     $avocatStmt->bindParam(':derniere_diplome', $derniere_diplome, PDO::PARAM_STR);
                     $avocatStmt->bindParam(':adresse', $adresse, PDO::PARAM_STR);
-                    
-                    if (!$avocatStmt->execute()) {
-                        throw new PDOException("Erreur lors de l'insertion des informations de l'avocat");
-                    }
+                    $avocatStmt->execute();
                 }
 
                 // Commit transaction
@@ -108,7 +102,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         } catch (PDOException $e) {
             // Rollback transaction on error
             $conn->rollBack();
-            $message = "Une erreur est survenue lors de l'inscription. Veuillez réessayer. Erreur : " . $e->getMessage();
+            $message = "Une erreur est survenue lors de l'inscription. Veuillez réessayer.";
             error_log("Error: " . $e->getMessage());
         }
     }

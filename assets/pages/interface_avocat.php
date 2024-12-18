@@ -6,6 +6,7 @@ $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 if ($id > 0) {
     $sql = "
     SELECT 
+       
         SUM(pourcentage_sans_acute) AS count_pourcentage_sans_acute,
         SUM(pourcentage_capacite_jugement) AS count_pourcentage_capacite_jugement,
         SUM(pourcentage_connaissance_approfondie) AS count_pourcentage_connaissance_approfondie
