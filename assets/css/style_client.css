@@ -1,0 +1,127 @@
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    padding: 2rem;
+    background-color: #ffffff;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem;
+}
+
+@media (max-width: 1200px) {
+    .grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 900px) {
+    .grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    .grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.card {
+    position: relative;
+    aspect-ratio: 1;
+    cursor: pointer;
+}
+
+.card-inner {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 3px solid #0A2759;
+    background-color: white;
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+.card:hover .card-inner {
+    background-color: #0087CD;
+}
+
+.content {
+    position: relative;
+    height: 100%;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    z-index: 2;
+}
+
+.column-icon {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1;
+    opacity: 0.1;
+}
+
+.column-icon svg {
+    width: 60%;
+    height: 60%;
+    color: #C5A572;
+}
+
+.city {
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    color: #0A2759;
+    margin-bottom: 0.5rem;
+    transition: color 0.3s ease;
+}
+
+.name {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #0A2759;
+    margin-bottom: 1rem;
+    transition: color 0.3s ease;
+}
+
+.card:hover .city,
+.card:hover .name {
+    color: black;
+}
+
+.arrow-container {
+    width: 2rem;
+    height: 2rem;
+    background-color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.3s ease;
+}
+
+.card:hover .arrow-container {
+    transform: translateX(0.5rem);
+}
+
+.arrow {
+    width: 1rem;
+    height: 1rem;
+    color: #0A2759;
+}
