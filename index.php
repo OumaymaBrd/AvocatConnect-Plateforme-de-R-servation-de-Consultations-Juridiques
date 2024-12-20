@@ -68,15 +68,24 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
                 $insertStmt->execute();
 
+                // Get the last inserted ID
+                $lastInsertId = $conn->lastInsertId();
+
                 // If the user is an Avocat, insert additional information
                 if ($post === 'Avocat') {
-                    $avocatSql = "INSERT INTO avocat_info (id_avocat , biographie, derniere_diplome, adresse) 
-                                  VALUES (LAST_INSERT_ID(), :biographie, :derniere_diplome, :adresse)";
+                    if (empty($biographie) || empty($derniere_diplome) || empty($adresse)) {
+                        throw new Exception("Tous les champs pour l'avocat doivent être remplis.");
+                    }
+
+                    $avocatSql = "INSERT INTO info_avocat (id_avocat, biographie, derniere_diplome, adresse) 
+                                  VALUES (:id_avocat, :biographie, :derniere_diplome, :adresse)";
                     $avocatStmt = $conn->prepare($avocatSql);
+                    $avocatStmt->bindParam(':id_avocat', $lastInsertId, PDO::PARAM_INT);
                     $avocatStmt->bindParam(':biographie', $biographie, PDO::PARAM_STR);
                     $avocatStmt->bindParam(':derniere_diplome', $derniere_diplome, PDO::PARAM_STR);
                     $avocatStmt->bindParam(':adresse', $adresse, PDO::PARAM_STR);
                     $avocatStmt->execute();
+
                 }
 
                 // Commit transaction
@@ -99,10 +108,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $message = "Inscription réussie, mais l'envoi de l'email a échoué. Veuillez contacter l'administrateur.";
                 }
             }
-        } catch (PDOException $e) {
+        } catch (Exception $e) {
             // Rollback transaction on error
             $conn->rollBack();
-            $message = "Une erreur est survenue lors de l'inscription. Veuillez réessayer.";
+            $message = "Une erreur est survenue lors de l'inscription : " . $e->getMessage();
             error_log("Error: " . $e->getMessage());
         }
     }
@@ -120,7 +129,26 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         function toggleAvocatFields() {
             var post = document.getElementById('post').value;
             var avocatFields = document.getElementById('avocat_fields');
-            avocatFields.style.display = (post === 'Avocat') ? 'block' : 'none';
+            var avocatInputs = avocatFields.getElementsByTagName('input');
+            var avocatTextarea = avocatFields.getElementsByTagName('textarea');
+            
+            if (post === 'Avocat') {
+                avocatFields.style.display = 'block';
+                for (var i = 0; i < avocatInputs.length; i++) {
+                    avocatInputs[i].required = true;
+                }
+                for (var i = 0; i < avocatTextarea.length; i++) {
+                    avocatTextarea[i].required = true;
+                }
+            } else {
+                avocatFields.style.display = 'none';
+                for (var i = 0; i < avocatInputs.length; i++) {
+                    avocatInputs[i].required = false;
+                }
+                for (var i = 0; i < avocatTextarea.length; i++) {
+                    avocatTextarea[i].required = false;
+                }
+            }
         }
     </script>
 </head>
@@ -169,3 +197,4 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     </div>
 </body>
 </html>
+

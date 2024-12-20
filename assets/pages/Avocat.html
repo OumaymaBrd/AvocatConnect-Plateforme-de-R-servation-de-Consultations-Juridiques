@@ -112,13 +112,11 @@
             link.addEventListener('click', setActiveLink);
         });
 
-        // Fonction pour basculer la visibilité de la barre latérale sur mobile
         function toggleSidebar() {
             const sidebar = document.querySelector('.sidebar');
             sidebar.style.display = sidebar.style.display === 'none' ? 'block' : 'none';
         }
 
-        // Ajouter un bouton pour basculer la barre latérale sur mobile
         if (window.innerWidth <= 768) {
             const header = document.querySelector('.header');
             const toggleButton = document.createElement('button');
@@ -127,7 +125,6 @@
             header.insertBefore(toggleButton, header.firstChild);
         }
 
-        // Fonction pour mettre à jour dynamiquement les statistiques
         function updateStats() {
             const statValues = document.querySelectorAll('.stat-item .value');
             statValues.forEach(value => {
@@ -136,8 +133,6 @@
                 value.textContent = Math.max(0, newValue); // Assure que la valeur ne descend pas en dessous de 0
             });
         }
-
-        // Mettre à jour les statistiques toutes les 5 secondes
         setInterval(updateStats, 5000);
     </script>
 </body>
