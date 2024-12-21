@@ -25,9 +25,13 @@
             <div class="hero-content">
                 <h1>Cabinet Martin & Associés</h1>
                 <p>Excellence juridique et accompagnement personnalisé pour tous vos besoins légaux</p>
-                <a href="reservation.html" class="btn btn-primary">
+                <a href="assets/pages/login.php" class="btn btn-primary">
                     <i data-feather="calendar"></i>
                     Prendre rendez-vous
+                </a>
+                <a href="assets/pages/stage.php" class="btn btn-primary">
+                    <i data-feather="calendar"></i>
+                    Posuler a un stage
                 </a>
             </div>
         </section>
