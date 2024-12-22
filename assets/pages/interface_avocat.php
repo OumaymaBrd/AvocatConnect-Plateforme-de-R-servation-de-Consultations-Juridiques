@@ -79,6 +79,80 @@ if ($id > 0) {
     $stmt_reservations->execute();
     $reservations = $stmt_reservations->fetchAll(PDO::FETCH_ASSOC);
 }
+
+$message = '';
+$error = '';
+
+// Récupération des stages
+$sql = "SELECT * FROM demande_stage ORDER BY id_stagiaire DESC";
+$stmt = $conn->prepare($sql);
+$stmt->execute();
+$stages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Traitement de la mise à jour du statut
+if(isset($_POST['update_status'])) {
+    $id = intval($_POST['id_stagiaire']);
+    $action = $_POST['action'];
+    
+    $newStatus = ($action === 'Valider') ? 'Validé' : "Dans l'attente de la libération des places";
+    
+    try {
+        $updateSql = "UPDATE demande_stage SET validation_avocat = :status WHERE id_stagiaire = :id";
+        $updateStmt = $conn->prepare($updateSql);
+        $result = $updateStmt->execute([':status' => $newStatus, ':id' => $id]);
+        
+        if($result) {
+            echo json_encode(['success' => true, 'message' => 'Statut mis à jour avec succès', 'newStatus' => $newStatus]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Erreur lors de la mise à jour']);
+        }
+        exit;
+    } catch(PDOException $e) {
+        echo json_encode(['success' => false, 'message' => 'Erreur: ' . $e->getMessage()]);
+        exit;
+    }
+}
+
+
+$message = '';
+$id_specialite = isset($_GET['id']) ? intval($_GET['id']) : 0;
+
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['selected_dates'])) {
+    $selectedDates = json_decode($_POST['selected_dates'], true);
+    
+    if (!empty($selectedDates) && $id_specialite > 0) {
+        try {
+            $stmt = $conn->prepare("INSERT INTO blocked_dates (date_occuper, id_specialite) VALUES (:date, :id_specialite)");
+            $stmt->bindParam(':id_specialite', $id_specialite, PDO::PARAM_INT);
+            
+            $conn->beginTransaction();
+            foreach ($selectedDates as $date) {
+                $stmt->bindParam(':date', $date);
+                $stmt->execute();
+            }
+            $conn->commit();
+            
+            echo "Les dates ont été enregistrées avec succès.";
+            exit;
+        } catch (PDOException $e) {
+            $conn->rollBack();
+            echo "Erreur lors de l'enregistrement des dates.";
+            exit;
+        }
+    }
+}
+
+$blockedDates = [];
+if ($id_specialite > 0) {
+    try {
+        $stmt = $conn->prepare("SELECT date_occuper FROM blocked_dates WHERE id_specialite = :id_specialite");
+        $stmt->bindParam(':id_specialite', $id_specialite, PDO::PARAM_INT);
+        $stmt->execute();
+        $blockedDates = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    } catch (PDOException $e) {
+        $message = "Erreur lors de la récupération des dates bloquées.";
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -88,6 +162,8 @@ if ($id > 0) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard de l'avocat</title>
     <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -165,7 +241,42 @@ if ($id > 0) {
         .action-form {
             display: inline;
         }
+
+        .container { max-width: 1200px; margin-top: 30px; }
+        .status-pending { color: orange; }
+        .status-approved { color: green; }
+        .status-rejected { color: red; }
+
+        #calendar { max-width: 800px; margin: 0 auto; }
+        .fc-day-future { cursor: pointer; }
+        .fc-day-future:hover { background-color: #f0f0f0; }
+        .unavailable { background-color: #ffcccb !important; }
+        #messageContainer {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            display: none;
+        }
+
+        #calendar { max-width: 800px; margin: 0 auto; }
+        .fc-day-future { cursor: pointer; }
+        .fc-day-future:hover { background-color: #f0f0f0; }
+        .unavailable { background-color: #ffcccb !important; }
+        #messageContainer {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            display: none;
+        }
     </style>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href='https://cdn.jsdelivr.net/npm/fullcalendar@5.10.2/main.css' rel='stylesheet' />
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.10.2/main.js'></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href='https://cdn.jsdelivr.net/npm/fullcalendar@5.10.2/main.css' rel='stylesheet' />
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.10.2/main.js'></script>
 </head>
 <body>
     <div class="container">
@@ -200,6 +311,216 @@ if ($id > 0) {
                     chart.draw(data, options);
                 }
             </script>
+
+
+<div>
+      
+        <button id="showStagiairesBtn" class="btn btn-primary mb-3">Afficher</button>
+
+        <!-- Modal -->
+        <div class="modal fade" id="stagiairesModal" tabindex="-1" aria-labelledby="stagiairesModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-xl">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="stagiairesModalLabel">Liste des Stagiaires</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Nom</th>
+                                        <th>Prénom</th>
+                                        <th>Email</th>
+                                        <th>Durée (mois)</th>
+                                        <th>Statut</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($stages as $stage): ?>
+                                        <tr>
+                                            <td><?php echo htmlspecialchars($stage['id_stagiaire']); ?></td>
+                                            <td><?php echo htmlspecialchars($stage['nom']); ?></td>
+                                            <td><?php echo htmlspecialchars($stage['prenom']); ?></td>
+                                            <td><?php echo htmlspecialchars($stage['email']); ?></td>
+                                            <td><?php echo htmlspecialchars($stage['Duree_stage_mois']); ?></td>
+                                            <td class="status-cell">
+                                                <span class="status-<?php echo strtolower(str_replace(' ', '-', $stage['validation_avocat'])); ?>">
+                                                    <?php echo htmlspecialchars($stage['validation_avocat']); ?>
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <button class="btn btn-success btn-sm update-status" 
+                                                        data-id="<?php echo $stage['id_stagiaire']; ?>" 
+                                                        data-action="Valider">
+                                                    Valider
+                                                </button>
+                                                <button class="btn btn-danger btn-sm update-status" 
+                                                        data-id="<?php echo $stage['id_stagiaire']; ?>" 
+                                                        data-action="Refuser">
+                                                    Refuser
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+    $(document).ready(function() {
+        var modal = new bootstrap.Modal(document.getElementById('stagiairesModal'));
+
+        $('#showStagiairesBtn').click(function() {
+            modal.show();
+        });
+
+        $('.update-status').click(function() {
+            var id = $(this).data('id');
+            var action = $(this).data('action');
+            var row = $(this).closest('tr');
+
+            if (confirm('Voulez-vous vraiment ' + action.toLowerCase() + ' cette demande de stage ?')) {
+                updateStatus(id, action, row);
+            }
+        });
+
+        function updateStatus(id_stagiaire, action, row) {
+            $.ajax({
+                url: 'gestion-stagiaires.php',
+                method: 'POST',
+                data: {
+                    update_status: 1,
+                    id_stagiaire: id_stagiaire,
+                    action: action
+                },
+                dataType: 'json',
+                success: function(data) {
+                    if (data.success) {
+                        var statusCell = row.find('.status-cell');
+                        statusCell.html('<span class="status-' + data.newStatus.toLowerCase().replace(/ /g, '-') + '">' + data.newStatus + '</span>');
+                        alert(data.message);
+                    } else {
+                        alert('Erreur: ' + data.message);
+                    }
+                },
+                error: function() {
+                    alert('Une erreur est survenue');
+                }
+            });
+        }
+    });
+    </script>
+
+<div >
+        
+        <div id="messageContainer" class="alert alert-success"></div>
+        
+        <div >
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#calendarModal">
+                Sélectionner une date
+            </button>
+        </div>
+
+        <div class="modal fade" id="calendarModal" tabindex="-1" aria-labelledby="calendarModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-xl">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="calendarModalLabel">Sélectionnez vos dates non disponibles</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id='calendar'></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                        <button type="button" class="btn btn-primary" id="submitDates">Valider</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var calendarEl = document.getElementById('calendar');
+        var blockedDates = <?php echo json_encode($blockedDates); ?>;
+        var calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: 'dayGridMonth',
+            headerToolbar: {
+                left: 'prev,next today',
+                center: 'title',
+                right: 'dayGridMonth,dayGridYear'
+            },
+            selectable: true,
+            dateClick: function(info) {
+                if (info.date >= new Date()) {
+                    info.dayEl.classList.toggle('unavailable');
+                }
+            },
+            events: blockedDates.map(function(date) {
+                return {
+                    start: date,
+                    display: 'background',
+                    color: '#ffcccb'
+                };
+            })
+        });
+
+        var calendarModal = document.getElementById('calendarModal');
+        calendarModal.addEventListener('shown.bs.modal', function () {
+            calendar.render();
+        });
+
+        document.getElementById('submitDates').addEventListener('click', function() {
+            var unavailableDates = [];
+            document.querySelectorAll('.unavailable').forEach(function(el) {
+                unavailableDates.push(el.getAttribute('data-date'));
+            });
+
+            var formData = new FormData();
+            formData.append('selected_dates', JSON.stringify(unavailableDates));
+
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.text())
+            .then(message => {
+                var messageContainer = document.getElementById('messageContainer');
+                messageContainer.textContent = message;
+                messageContainer.style.display = 'block';
+                
+                // Fermer le modal
+                var modal = bootstrap.Modal.getInstance(calendarModal);
+                modal.hide();
+                
+                // Cacher le message après 3 secondes
+                setTimeout(function() {
+                    messageContainer.style.display = 'none';
+                }, 3000);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                var messageContainer = document.getElementById('messageContainer');
+                messageContainer.textContent = "Une erreur s'est produite.";
+                messageContainer.style.display = 'block';
+            });
+        });
+    });
+    </script>
+   
 
             <h2>Réservations</h2>
             <table>
@@ -246,4 +567,5 @@ if ($id > 0) {
     </div>
 </body>
 </html>
+<!--  -->
 
